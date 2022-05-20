@@ -1,155 +1,124 @@
 #include "shell.h"
 
 /**
- * exitt - exits the shell with or without a return of status n
- * @arv: array of words of the entered line
+ * c_dir - changes current directory
+ *
+ * @cmd: data relevant
+ * Return: 1 on success
  */
-void exitt(char **arv)
+int c_dir(cmd_t *cmd)
 {
-	int i, n;
-
-	if (arv[1])
-	{
-		n = _atoi(arv[1]);
-		if (n <= -1)
-			n = 2;
-		freearv(arv);
-		exit(n);
-	}
-	for (i = 0; arv[i]; i++)
-		free(arv[i]);
-	free(arv);
-	exit(0);
+	char *args = cmd->args[1];
+	if (!args || !_strcmp(args, "~") || !_strcmp(args, "$HOME") || !_strcmp(args, "--"))
+		return (cd_home(cmd));
+	else if (!_strcmp(args, "-"))
+		return (cd_back(cmd));
+	else if (!_strcmp(args, "."))
+		return (cd_curr(cmd));
+	else if (!_strcmp(args, ".."))
+		return (cd_parent(cmd));
+	else
+		return (cd_path(args, cmd));
 }
 
 /**
- * _atoi - converts a string into an integer
- *@s: pointer to a string
- *Return: the integer
+ * set_env - sets an environment variable
+ *
+ * @name: name of the environment variable
+ * @value: value of the environment variable
+ * @cmd: data structure (environ)
+ * Return: no return
  */
-int _atoi(char *s)
+void set_env(char *name, char *value, cmd_t *cmd)
 {
-	int i, integer, sign = 1;
-
-	i = 0;
-	integer = 0;
-	while (!((s[i] >= '0') && (s[i] <= '9')) && (s[i] != '\0'))
-	{
-		if (s[i] == '-')
-		{
-			sign = sign * (-1);
-		}
-		i++;
-	}
-	while ((s[i] >= '0') && (s[i] <= '9'))
-	{
-		integer = (integer * 10) + (sign * (s[i] - '0'));
-		i++;
-	}
-	return (integer);
-}
-
-/**
- * env - prints the current environment
- * @arv: array of arguments
- */
-void env(char **arv __attribute__ ((unused)))
-{
-
 	int i;
+	char *var_env, *name_env;
 
-	for (i = 0; environ[i]; i++)
+	for (i = 0; cmd->envar[i]; i++)
 	{
-		_puts(environ[i]);
-		_puts("\n");
+		var_env = _strdup(cmd->envar[i]);
+		name_env = _strtok(var_env, "=");
+		if (_strcmp(name_env, name) == 0)
+		{
+			free(cmd->envar[i]);
+			cmd->envar[i] = copy_info(name_env, value);
+			free(var_env);
+			return;
+		}
+		free(var_env);
 	}
 
+	cmd->envar = _reallocdp(cmd->envar, i, sizeof(char *) * (i + 2));
+	cmd->envar[i] = copy_info(name, value);
+	cmd->envar[i + 1] = NULL;
 }
 
 /**
- * _setenv - Initialize a new environment variable, or modify an existing one
- * @arv: array of entered words
+ * _setenv - compares env variables names
+ * with the name passed.
+ * @cmd: data relevant (env name and env value)
+ *
+ * Return: 1 on success.
  */
-void _setenv(char **arv)
+int _setenv(cmd_t *cmd)
 {
+
+	if (cmd->args[1] == NULL || cmd->args[2] == NULL)
+	{
+		return (1);
+	}
+
+	set_env(cmd->args[1], cmd->args[2], cmd);
+
+	return (1);
+}
+
+/**
+ * _unsetenv - deletes a environment variable
+ *
+ * @cmd: data relevant (env name)
+ *
+ * Return: 1 on success.
+ */
+int _unsetenv(cmd_t *cmd)
+{
+	char **realloc_envar;
+	char *var_env, *name_env;
 	int i, j, k;
 
-	if (!arv[1] || !arv[2])
+	if (cmd->args[1] == NULL)
 	{
-		perror(_getenv("_"));
-		return;
+		return (1);
 	}
-
-	for (i = 0; environ[i]; i++)
+	k = -1;
+	for (i = 0; cmd->envar[i]; i++)
 	{
-		j = 0;
-		if (arv[1][j] == environ[i][j])
+		var_env = _strdup(cmd->envar[i]);
+		name_env = _strtok(var_env, "=");
+		if (_strcmp(name_env, cmd->args[1]) == 0)
 		{
-			while (arv[1][j])
-			{
-				if (arv[1][j] != environ[i][j])
-					break;
-
-				j++;
-			}
-			if (arv[1][j] == '\0')
-			{
-				k = 0;
-				while (arv[2][k])
-				{
-					environ[i][j + 1 + k] = arv[2][k];
-					k++;
-				}
-				environ[i][j + 1 + k] = '\0';
-				return;
-			}
+			k = i;
+		}
+		free(var_env);
+	}
+	if (k == -1)
+	{
+		return (1);
+	}
+	realloc_envar = malloc(sizeof(char *) * (i));
+	for (i = j = 0; cmd->envar[i]; i++)
+	{
+		if (i != k)
+		{
+			realloc_envar[j] = cmd->envar[i];
+			j++;
 		}
 	}
-	if (!environ[i])
-	{
-
-		environ[i] = concat_all(arv[1], "=", arv[2]);
-		environ[i + 1] = '\0';
-
-	}
+	realloc_envar[j] = NULL;
+	free(cmd->envar[k]);
+	free(cmd->envar);
+	cmd->envar = realloc_envar;
+	return (1);
 }
 
-/**
- * _unsetenv - Remove an environment variable
- * @arv: array of entered words
- */
-void _unsetenv(char **arv)
-{
-	int i, j;
 
-	if (!arv[1])
-	{
-		perror(_getenv("_"));
-		return;
-	}
-	for (i = 0; environ[i]; i++)
-	{
-		j = 0;
-		if (arv[1][j] == environ[i][j])
-		{
-			while (arv[1][j])
-			{
-				if (arv[1][j] != environ[i][j])
-					break;
-
-				j++;
-			}
-			if (arv[1][j] == '\0')
-			{
-				free(environ[i]);
-				environ[i] = environ[i + 1];
-				while (environ[i])
-				{
-					environ[i] = environ[i + 1];
-					i++;
-				}
-				return;
-			}
-		}
-	}
-}
